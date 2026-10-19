@@ -36,7 +36,7 @@ export function card(parent, { title, kind, labels, datasets, unit = '', csv = n
   const el = document.createElement('section');
   el.className = 'card' + (wide ? ' wide' : '');
   el.innerHTML = `<header><h3>${title}</h3><div class="actions">
-    ${csv ? `<a class="btn" href="${csv}" download>CSV</a>` : ''}
+    ${csv ? `<a class="btn" href="${csv}" download="${filename}.csv">CSV</a>` : ''}
     ${kind !== 'tabla' ? '<button class="btn png" type="button">PNG</button>' : ''}</div></header><div class="body"></div>`;
   parent.append(el);
   const body = el.querySelector('.body');

@@ -46,6 +46,12 @@ make test
 
 Filtros de matriz: `level`, `territorio`, `recurso`, `subtipo`, `potencial` (repetible), `desde`, `hasta` (`YYYY-MM`), `agrupar`.
 
+## Publicación
+
+**Red local:** `docker compose up -d` publica el puerto 8080 en todas las interfaces; desde otro dispositivo de la misma red abre `http://IP_DEL_PC:8080`.
+
+**GitHub Pages (demo estática):** Pages solo sirve archivos, no ejecuta FastAPI ni PostgreSQL. El workflow `pages.yml` exporta los datos a `data.json` (`backend/scripts/export_static.py`) y compila el frontend con `VITE_STATIC=true`, de modo que el navegador calcula los mismos filtros y CSV sin backend. En *Settings → Pages* la fuente debe ser **GitHub Actions**.
+
 ## Decisiones
 
 - **Tema fijo con 2 opciones** (Día / Noche): botón manual guardado en `localStorage`; se eliminó `prefers-color-scheme`. El único breakpoint responsive es `max-width: 820px`.
