@@ -1,11 +1,15 @@
 import { get, url } from './api.js';
-import { card, chips, destroyCharts, fmt, MONTHS, toggle } from './ui.js';
+import { buildingSvg } from './buildings.js';
+import { card, chips, destroyCharts, fmt, initSeg, MONTHS, segment, toggle } from './ui.js';
 
-const COLORS = { total: '#005e85', legacy: '#533278', nogal: '#00c0b3', gen: '#dfdf3f', sol: '#3bac52' };
-const TABS = [{ value: 'consumo', label: 'Carga de la universidad' }, { value: 'generacion', label: 'Generación solar' }, { value: 'cargas', label: 'Cargas atendidas por los paneles' }];
-const EDIF = [{ value: 'todos', label: 'Total' }, { value: 'legacy', label: 'Legacy' }, { value: 'nogal', label: 'Nogal' }, { value: 'comparar', label: 'Comparar edificios' }];
+const COLORS = { total: '#005e85', legacy: '#533278', nogal: '#3bac52', sol: '#3bac52' };
+const TABS = [{ value: 'consumo', label: 'Carga de la universidad' }, { value: 'generacion', label: 'Generación solar' }, { value: 'cargas', label: 'Cargas atendidas' }];
+const EDIF = [{ value: 'todos', label: 'Total', sub: 'Legacy + Nogal' }, { value: 'legacy', label: 'Legacy', sub: 'Edificio grande' }, { value: 'nogal', label: 'Nogal', sub: 'Edificio pequeño' }, { value: 'comparar', label: 'Comparar', sub: 'Lado a lado' }];
 const S = { tab: 'consumo', edificio: 'todos', meses: [], tipo: 'barras' };
 let rows = [], root;
+
+const tiles = () => `<div class="tiles">${EDIF.map((e) => `<button type="button" class="tile ${S.edificio === e.value ? 'on' : ''}" data-chip="edificio" data-v="${e.value}">
+  ${buildingSvg(e.value === 'todos' ? 'total' : e.value === 'comparar' ? 'compare' : e.value)}<span>${e.label}</span><small>${e.sub}</small></button>`).join('')}</div>`;
 
 export async function mount(el) {
   root = el;
@@ -29,48 +33,52 @@ const sum = (arr, f) => arr.reduce((s, r) => s + r[f], 0);
 async function draw() {
   const compare = S.edificio === 'comparar';
   const edif = compare ? 'todos' : S.edificio;
+  const edifLbl = { todos: 'Total (Legacy + Nogal)', legacy: 'Legacy', nogal: 'Nogal', comparar: 'Legacy vs. Nogal' }[S.edificio];
   const field = S.tab === 'generacion' ? 'generacion_kwh' : 'consumo_kwh';
   const months = S.meses.length ? S.meses : MONTHS.map((_, i) => i + 1);
-  const pct = (sum(rows.filter((r) => months.includes(r.mes) && (edif === 'todos' || r.edificio === edif)), 'generacion_kwh') /
-    sum(rows.filter((r) => months.includes(r.mes) && (edif === 'todos' || r.edificio === edif)), 'consumo_kwh') * 100).toFixed(1);
+  const scope = rows.filter((r) => months.includes(r.mes) && (edif === 'todos' || r.edificio === edif));
+  const pct = (sum(scope, 'generacion_kwh') / sum(scope, 'consumo_kwh') * 100).toFixed(1);
   const csv = url('/ean/export.csv', { edificio: edif, meses: S.meses });
   const tipos = S.tab === 'cargas' ? [{ value: 'anillo', label: 'Anillo' }, { value: 'pastel', label: 'Pastel' }, { value: 'tabla', label: 'Tabla' }]
     : [{ value: 'barras', label: 'Barras' }, { value: 'lineas', label: 'Líneas' }, { value: 'tabla', label: 'Tabla' }];
+  const mesesTxt = S.meses.length ? S.meses.map((m) => MONTHS[m - 1]).join(', ') : 'todo el año';
 
   root.innerHTML = `
-    <div class="card" style="margin-bottom:16px">
-      <div class="meta" style="margin-bottom:8px"><b>Edificio</b><span>Solar sobre consumo ${S.meses.length ? '(meses elegidos)' : '(promedio anual)'}: <b style="color:var(--accent)">${pct}%</b></span></div>
-      ${chips('edificio', EDIF, [S.edificio])}
-      <div class="meta" style="margin:14px 0 8px"><b>Meses</b><span>${S.meses.length ? '' : 'todos'}</span></div>
+    <div class="panel glass">
+      <div class="row"><strong>Edificio</strong><span>Solar sobre consumo (${S.meses.length ? 'meses elegidos' : 'promedio anual'}): <b style="color:var(--accent-ink);font-weight:800">${pct}%</b></span></div>
+      ${tiles()}
+      <div class="row" style="margin-top:18px"><strong>Meses</strong><span>${S.meses.length ? '' : 'Todos'}</span></div>
       ${chips('meses', MONTHS.map((m, i) => ({ value: i + 1, label: m })), S.meses)}
     </div>
-    <div class="chips" style="margin-bottom:12px">${chips('tab', TABS, [S.tab])}<span style="flex:1"></span>${chips('tipo', tipos, [S.tipo])}</div>
+    <div class="toolbar">${segment('tab', TABS, S.tab)}${segment('tipo', tipos, S.tipo)}</div>
     <div class="chart-grid" id="grid"></div>`;
   const grid = document.getElementById('grid');
   destroyCharts();
   const kind = { barras: 'bar', lineas: 'line', tabla: 'tabla', pastel: 'pie', anillo: 'doughnut' }[S.tipo];
+  const subtitle = `${edifLbl} · ${mesesTxt} · 2025`;
 
   if (S.tab === 'cargas') {
     const c = (await get('/ean/cargas', { edificio: edif })).items;
     const pal = ['#dfdf3f', '#533278', '#00c0b3', '#005e85', '#009579'];
-    card(grid, { title: `Cargas atendidas · ${EDIF.find((e) => e.value === edif).label}`, kind, labels: c.map((x) => x.carga), unit: '%', wide: true, filename: `ean_cargas_${edif}`,
+    card(grid, { title: `Cargas atendidas por los paneles · ${edifLbl}`, kind, labels: c.map((x) => x.carga), unit: '%', wide: true, filename: `ean_cargas_${edif}`, subtitle,
       datasets: [{ label: '%', data: c.map((x) => x.pct), colors: pal }] });
+    initSeg(root);
     return;
   }
 
   const dim = (hex) => MONTHS.map((_, i) => (S.meses.length && !S.meses.includes(i + 1) ? hex + '44' : hex));
-  const serie = (label, b, field, color) => ({ label, color, colors: dim(color), data: MONTHS.map((_, i) => sum(sel(i + 1, b), field)) });
+  const serie = (label, b, f, color) => ({ label, color, colors: dim(color), data: MONTHS.map((_, i) => sum(sel(i + 1, b), f)) });
   let datasets;
   if (compare) datasets = ['legacy', 'nogal'].map((b) => serie(b === 'legacy' ? 'Legacy' : 'Nogal', b, field, COLORS[b]));
   else {
     const b = edif === 'todos' ? null : edif;
     datasets = S.tab === 'generacion'
       ? [serie('Consumo', b, 'consumo_kwh', COLORS.total), serie('Generación solar', b, 'generacion_kwh', COLORS.sol)]
-      : [serie('Consumo', b, 'consumo_kwh', COLORS.total)];
+      : [serie('Consumo', b, 'consumo_kwh', COLORS[b || 'total'])];
   }
   if (kind === 'bar' && datasets.length > 1) datasets.forEach((d) => (d.colors = undefined));
   const title = S.tab === 'generacion' ? 'Consumo vs. generación solar' : 'Consumo mensual';
-  const sub = S.meses.length ? S.meses.map((m) => `${MONTHS[m - 1]}: ${fmt(sum(sel(m, edif === 'todos' ? null : edif), field))} kWh`).join(' · ') : '';
-  card(grid, { title, kind, labels: MONTHS, datasets, unit: 'kWh', csv, wide: true, filename: `ean_${S.tab}_${S.edificio}` });
-  if (sub) grid.insertAdjacentHTML('beforebegin', `<div class="meta">${sub}</div>`);
+  if (S.meses.length) grid.insertAdjacentHTML('beforebegin', `<div class="meta">${S.meses.map((m) => `<span>${MONTHS[m - 1]}: <b>${fmt(sum(sel(m, edif === 'todos' ? null : edif), field))} kWh</b></span>`).join('')}</div>`);
+  card(grid, { title, kind, labels: MONTHS, datasets, unit: 'kWh', csv, wide: true, filename: `ean_${S.tab}_${S.edificio}`, subtitle, xTitle: 'Mes (2025)', yTitle: 'Energía (kWh)' });
+  initSeg(root);
 }

@@ -1,5 +1,5 @@
 import { get, url } from './api.js';
-import { card, chips, destroyCharts, fmt, palette, select, toggle, MONTHS } from './ui.js';
+import { card, chips, destroyCharts, fmt, initSeg, palette, select, toggle, MONTHS } from './ui.js';
 
 const KIND = { barras: 'bar', pastel: 'pie', anillo: 'doughnut', tabla: 'tabla', lineas: 'line' };
 const TIPOS = Object.keys(KIND).map((k) => ({ value: k, label: k[0].toUpperCase() + k.slice(1) }));
@@ -11,7 +11,7 @@ export async function mount(el) {
   root = el;
   meta = await get('/meta');
   S.desde = meta.periodo.desde; S.hasta = meta.periodo.hasta;
-  root.innerHTML = `<div class="layout"><aside class="side" id="filters"></aside><section id="out"></section></div>`;
+  root.innerHTML = `<div class="layout"><aside class="side glass" id="filters"></aside><section id="out"></section></div>`;
   root.onchange = (e) => onKey(e.target);
   root.onclick = (e) => {
     const b = e.target.closest('[data-chip]');
@@ -68,6 +68,9 @@ async function refresh() {
     const labels = tot.items.map((i) => i.label);
     const csv = url('/matriz/export.csv', f);
     const name = `matriz_${agrupar}_${S.desde}_${S.hasta}`;
+    const recLbl = S.recurso === 'todos' ? 'todos los recursos' : meta.recursos.find((r) => r.value === S.recurso).label;
+    const potLbl = S.potencial.map((p) => meta.potenciales.find((x) => x.value === p).label).join(' y ').toLowerCase();
+    const catTitle = { recurso: 'Recurso', potencial: 'Tipo de potencial', territorio: LEVELS[S.level][0] }[agrupar];
 
     let tipos = S.tipos.filter((t) => ['tabla', 'barras', 'pastel', 'anillo', 'lineas'].includes(t));
     if (tot.items.length <= 1) tipos = tipos.includes('lineas') ? ['lineas', 'tabla'] : ['tabla']; // un solo dato: pastel/barras no aportan
@@ -75,7 +78,8 @@ async function refresh() {
 
     destroyCharts();
     const place = S.territorio ? meta[LEVELS[S.level][1]].find((o) => o.value === S.territorio)?.label : 'Colombia · todo el territorio';
-    out.innerHTML = `<div class="kpis">${kpi.items.map((k) => `<div class="kpi" style="--c:${fixed[k.key]}"><small>${k.label} · técnico</small><b>${fmt(k.value)}</b><small>GWh</small></div>`).join('')}</div>
+    const subtitle = `${place} · ${S.desde} a ${S.hasta} · ${recLbl} · potencial ${potLbl}`;
+    out.innerHTML = `<div class="kpis">${kpi.items.map((k) => `<div class="kpi glass" style="--c:${fixed[k.key]}"><small>${k.label} · técnico</small><b>${fmt(k.value)}</b><small>GWh</small></div>`).join('')}</div>
       <div class="meta"><span>${place}</span><span>${trend.periods.length} meses · ${tot.unit}</span></div><div class="chart-grid" id="grid"></div>`;
     const grid = document.getElementById('grid');
 
@@ -84,11 +88,12 @@ async function refresh() {
       if (t === 'lineas') {
         const p = trend.series.map((s, i) => ({ label: s.label, data: s.values, color: colorOf(s.key, i) }));
         const pl = trend.periods.map((x) => { const [y, m] = x.split('-'); return `${MONTHS[+m - 1]} ${y.slice(2)}`; });
-        card(grid, { title: 'Evolución mensual', kind: 'line', labels: pl, datasets: p, unit: tot.unit, csv, filename: `${name}_lineas`, wide });
+        card(grid, { title: 'Evolución mensual', kind: 'line', labels: pl, datasets: p, unit: tot.unit, csv, filename: `${name}_lineas`, wide, xTitle: 'Mes', yTitle: `Potencial mensual (${tot.unit})`, subtitle });
       } else {
         const ds = [{ label: tot.unit, data: tot.items.map((i) => i.value), colors: tot.items.map((i, j) => colorOf(i.key, j)) }];
-        card(grid, { title: t[0].toUpperCase() + t.slice(1), kind: KIND[t], labels, datasets: ds, unit: tot.unit, csv, filename: `${name}_${t}`, wide });
+        card(grid, { title: t[0].toUpperCase() + t.slice(1), kind: KIND[t], labels, datasets: ds, unit: tot.unit, csv, filename: `${name}_${t}`, wide, xTitle: catTitle, yTitle: `Potencial acumulado (${tot.unit})`, subtitle });
       }
     });
+    initSeg(out);
   } catch (e) { out.innerHTML = `<div class="err">No se pudo cargar la información: ${e.message}</div>`; }
 }

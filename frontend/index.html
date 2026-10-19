@@ -6,20 +6,23 @@
 <title>Matriz Energética · Universidad EAN</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Archivo+Black&family=Archivo:wght@400;700&family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<!-- Mikro (tipografía de marca, licenciada) se sustituye por Archivo; Open Sans es la tipografía complementaria del manual. -->
+<link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@100..125,500..900&family=Open+Sans:wdth,wght@75..100,300..800&display=swap" rel="stylesheet">
 </head>
 <body>
-<header class="top">
-  <div class="brand"><span class="eyebrow">UNIVERSIDAD EAN</span><h1>Matriz energética</h1></div>
-  <nav id="nav">
-    <button data-view="colombia" class="tab on">Matriz de Colombia</button>
-    <button data-view="ean" class="tab">Universidad EAN</button>
-  </nav>
-  <div class="seg" id="theme">
-    <button data-theme="day">Día</button><button data-theme="night">Noche</button>
+<header class="bar glass" id="bar">
+  <a class="logo" href="https://www.universidadean.edu.co" target="_blank" rel="noopener" id="logo"></a>
+  <div class="seg" id="nav" role="tablist">
+    <button data-view="colombia" class="on">Matriz de Colombia</button>
+    <button data-view="ean">Universidad EAN</button>
+  </div>
+  <div class="seg" id="theme" aria-label="Tema">
+    <button data-theme="day" aria-label="Día">☀︎ Día</button><button data-theme="night" aria-label="Noche">☾ Noche</button>
   </div>
 </header>
+<section class="hero"><h1 id="h1"></h1><p id="lead"></p></section>
 <main id="view"></main>
+<footer class="foot glass" id="foot"></footer>
 <script type="module" src="/src/main.js"></script>
 </body>
 </html>

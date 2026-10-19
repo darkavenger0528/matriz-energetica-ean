@@ -52,6 +52,10 @@ Filtros de matriz: `level`, `territorio`, `recurso`, `subtipo`, `potencial` (rep
 
 **GitHub Pages (demo estática):** Pages solo sirve archivos, no ejecuta FastAPI ni PostgreSQL. El workflow `pages.yml` exporta los datos a `data.json` (`backend/scripts/export_static.py`) y compila el frontend con `VITE_STATIC=true`, de modo que el navegador calcula los mismos filtros y CSV sin backend. En *Settings → Pages* la fuente debe ser **GitHub Actions**.
 
+## Diseño
+
+Basado en el manual de marca: verde `#3bac52` predominante con negro y blanco; colores secundarios solo para series de datos. Títulos en Mikro Black (aquí **Archivo**, porque Mikro es una fuente licenciada) y texto en Open Sans. Si tienes los archivos de Mikro, agrégalos en `frontend/public/fonts/` y declara un `@font-face` llamado `Mikro` en `style.css`; el stack ya lo usa primero. El logo (`src/logo.js`) y los edificios (`src/buildings.js`) son vectores. Los PNG de las gráficas se generan a 3200×1800 con título, filtros, ejes y logo.
+
 ## Decisiones
 
 - **Tema fijo con 2 opciones** (Día / Noche): botón manual guardado en `localStorage`; se eliminó `prefers-color-scheme`. El único breakpoint responsive es `max-width: 820px`.
