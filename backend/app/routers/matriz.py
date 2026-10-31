@@ -1,19 +1,19 @@
 import csv
 import io
 from dataclasses import dataclass
-from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Response
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .. import catalog as c
+from ..config import settings
 from ..db import get_db
 from ..models import Potencial as P
 
 router = APIRouter(prefix="/matriz", tags=["matriz"])
 
-Level = Literal["region", "departamento", "municipio"]
+TEORICO, UTIL = "teorico", "tecnico"  # "energía útil" = potencial técnico en los datos de ejemplo
 LEVEL_COL = {"region": P.region, "departamento": P.departamento, "municipio": P.municipio}
 LEVEL_LABELS = {
     "region": c.REGIONES,
@@ -25,34 +25,35 @@ YM = r"^\d{4}-(0[1-9]|1[0-2])$"
 
 @dataclass
 class Filters:
-    level: str
-    territorio: str | None
+    region: str | None
+    departamento: str | None
+    municipio: str | None
     recurso: str
     subtipo: str
-    potencial: list[str]
     d: int
     h: int
-    agrupar: str
 
 
 def filters(
-    level: Level = "region",
-    territorio: str | None = None,
+    region: str | None = None,
+    departamento: str | None = None,
+    municipio: str | None = None,
     recurso: str = "todos",
     subtipo: str = "todas",
-    potencial: list[str] = Query(["tecnico"]),
-    desde: str = Query(c.PERIODO["desde"], pattern=YM),
-    hasta: str = Query(c.PERIODO["hasta"], pattern=YM),
-    agrupar: Literal["recurso", "potencial", "territorio"] = "recurso",
+    desde: str | None = Query(None, pattern=YM),
+    hasta: str | None = Query(None, pattern=YM),
 ) -> Filters:
-    d, h = int(desde.replace("-", "")), int(hasta.replace("-", ""))
-    return Filters(level, territorio or None, recurso, subtipo, potencial, min(d, h), max(d, h), agrupar)
+    d, h = int(c.PERIODO["desde"].replace("-", "")), int(c.PERIODO["hasta"].replace("-", ""))
+    if settings.period_selectable and desde and hasta:  # si no es elegible se usa la serie completa
+        d, h = sorted((int(desde.replace("-", "")), int(hasta.replace("-", ""))))
+    return Filters(region or None, departamento or None, municipio or None, recurso, subtipo, d, h)
 
 
 def _conds(f: Filters):
-    cs = [P.period.between(f.d, f.h), P.potential.in_(f.potencial)]
-    if f.territorio:
-        cs.append(LEVEL_COL[f.level] == f.territorio)
+    cs = [P.period.between(f.d, f.h), P.potential.in_([TEORICO, UTIL])]
+    for col, v in ((P.region, f.region), (P.departamento, f.departamento), (P.municipio, f.municipio)):
+        if v:
+            cs.append(col == v)
     if f.recurso != "todos":
         cs.append(P.resource == f.recurso)
         if f.subtipo != "todas":
@@ -61,11 +62,11 @@ def _conds(f: Filters):
 
 
 def _group(f: Filters):
-    col = {"recurso": P.resource, "potencial": P.potential, "territorio": LEVEL_COL[f.level]}[f.agrupar]
-    labels = {"recurso": {k: v["label"] for k, v in c.RECURSOS.items()},
-              "potencial": {k: v["label"] for k, v in c.POTENCIALES.items()},
-              "territorio": LEVEL_LABELS[f.level]}[f.agrupar]
-    return col, labels
+    """Con 'todos' los recursos se agrupa por recurso; con un recurso, por el nivel territorial inmediatamente inferior al elegido."""
+    if f.recurso == "todos":
+        return P.resource, {k: v["label"] for k, v in c.RECURSOS.items()}, "recurso"
+    level = "municipio" if (f.municipio or f.departamento) else "departamento" if f.region else "region"
+    return LEVEL_COL[level], LEVEL_LABELS[level], level
 
 
 def _periods(f: Filters):
@@ -80,36 +81,51 @@ def _fmt(p: int) -> str:
     return f"{p // 100}-{p % 100:02d}"
 
 
-@router.get("/agregado")
-def agregado(f: Filters = Depends(filters), db: Session = Depends(get_db)):
-    col, labels = _group(f)
-    rows = db.execute(select(col, func.sum(P.value)).where(*_conds(f)).group_by(col)).all()
-    order = list(labels)
-    items = [{"key": k, "label": labels.get(k, k), "value": round(v, 1)} for k, v in rows]
-    items.sort(key=lambda i: order.index(i["key"]) if i["key"] in order else 999)
-    return {"unit": "GWh", "items": items}
-
-
-@router.get("/tendencia")
-def tendencia(f: Filters = Depends(filters), db: Session = Depends(get_db)):
-    col, labels = _group(f)
-    rows = db.execute(select(col, P.period, func.sum(P.value)).where(*_conds(f)).group_by(col, P.period)).all()
+@router.get("/series")
+def series(f: Filters = Depends(filters), db: Session = Depends(get_db)):
+    """Serie mensual del potencial teórico y de la energía útil, por grupo."""
+    col, labels, grupo = _group(f)
+    rows = db.execute(select(col, P.potential, P.period, func.sum(P.value)).where(*_conds(f)).group_by(col, P.potential, P.period)).all()
     periods = _periods(f)
-    data: dict[str, dict[int, float]] = {}
-    for k, p, v in rows:
-        data.setdefault(k, {})[p] = v
-    series = [{"key": k, "label": labels.get(k, k), "values": [round(data[k].get(p, 0), 1) for p in periods]} for k in labels if k in data]
-    return {"unit": "GWh", "periods": [_fmt(p) for p in periods], "series": series}
+    data: dict = {}
+    for k, pot, per, v in rows:
+        data.setdefault(pot, {}).setdefault(k, {})[per] = v
+
+    def build(pot):
+        return [{"key": k, "label": labels[k], "values": [round(data.get(pot, {}).get(k, {}).get(p, 0), 1) for p in periods]}
+                for k in labels if k in data.get(pot, {})]
+
+    return {"unit": "GWh", "grupo": grupo, "periods": [_fmt(p) for p in periods], "teorico": build(TEORICO), "util": build(UTIL)}
+
+
+@router.get("/resumen")
+def resumen(f: Filters = Depends(filters), db: Session = Depends(get_db)):
+    col, labels, grupo = _group(f)
+    rows = db.execute(select(col, P.potential, func.sum(P.value)).where(*_conds(f)).group_by(col, P.potential)).all()
+    acc: dict = {}
+    for k, pot, v in rows:
+        acc.setdefault(k, {})[pot] = v
+    items = []
+    for k in labels:
+        if k in acc:
+            t, u = acc[k].get(TEORICO, 0), acc[k].get(UTIL, 0)
+            items.append({"key": k, "label": labels[k], "teorico": round(t, 1), "util": round(u, 1), "pct": round(u / t * 100, 1) if t else 0})
+    tt, tu = sum(i["teorico"] for i in items), sum(i["util"] for i in items)
+    return {"unit": "GWh", "grupo": grupo, "items": items,
+            "total": {"teorico": round(tt, 1), "util": round(tu, 1), "pct": round(tu / tt * 100, 1) if tt else 0}}
 
 
 @router.get("/export.csv")
 def export_csv(f: Filters = Depends(filters), db: Session = Depends(get_db)):
-    col, labels = _group(f)
-    rows = db.execute(select(P.period, col, func.sum(P.value)).where(*_conds(f)).group_by(P.period, col).order_by(P.period, col)).all()
+    col, labels, grupo = _group(f)
+    rows = db.execute(select(P.period, col, P.potential, func.sum(P.value)).where(*_conds(f)).group_by(P.period, col, P.potential)).all()
+    acc: dict = {}
+    for per, k, pot, v in rows:
+        acc.setdefault((per, k), {})[pot] = v
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["periodo", f.agrupar, "valor_gwh"])
-    for p, k, v in rows:
-        w.writerow([_fmt(p), labels.get(k, k), round(v, 2)])
+    w.writerow(["periodo", grupo, "potencial_teorico_gwh", "energia_util_gwh"])
+    for (per, k) in sorted(acc, key=lambda x: (x[0], x[1])):
+        w.writerow([_fmt(per), labels.get(k, k), round(acc[(per, k)].get(TEORICO, 0), 2), round(acc[(per, k)].get(UTIL, 0), 2)])
     return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
-                    headers={"Content-Disposition": f'attachment; filename="matriz_{f.agrupar}_{_fmt(f.d)}_{_fmt(f.h)}.csv"'})
+                    headers={"Content-Disposition": f'attachment; filename="matriz_{grupo}_{_fmt(f.d)}_{_fmt(f.h)}.csv"'})

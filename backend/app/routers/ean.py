@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from ..catalog import EDIFICIOS
+from ..config import settings
 from ..db import get_db
 from ..models import EanCarga, EanLectura
 
@@ -50,12 +51,14 @@ def cargas(edificio: Edificio = "todos", anio: int = 2025, db: Session = Depends
 
 
 @router.get("/export.csv")
-def export_csv(edificio: Edificio = "todos", anio: int = 2025, meses: list[int] | None = Query(None), db: Session = Depends(get_db)):
+def export_csv(edificio: Edificio = "todos", anio: int = 2025, meses: list[int] | None = Query(None),
+               tarifa: float = settings.tarifa_cop_kwh, factor: float = settings.factor_emision_kg_kwh, db: Session = Depends(get_db)):
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["anio", "mes", "edificio", "consumo_kwh", "generacion_kwh", "pct_solar"])
+    w.writerow(["anio", "mes", "edificio", "consumo_kwh", "generacion_kwh", "pct_solar", "tarifa_cop_kwh", "ahorro_cop", "factor_kgco2e_kwh", "emisiones_evitadas_kgco2e"])
     for r in _lecturas(db, edificio, anio, meses):
-        w.writerow([r.year, r.month, EDIFICIOS[r.building], r.consumo_kwh, r.generacion_kwh,
-                    round(r.generacion_kwh / r.consumo_kwh * 100, 1)])
+        w.writerow([r.year, r.month, EDIFICIOS[r.building], round(r.consumo_kwh), round(r.generacion_kwh),
+                    round(r.generacion_kwh / r.consumo_kwh * 100, 1),
+                    f"{tarifa:g}", round(r.generacion_kwh * tarifa), f"{factor:g}", round(r.generacion_kwh * factor, 1)])
     return Response("\ufeff" + buf.getvalue(), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="ean_{edificio}_{anio}.csv"'})

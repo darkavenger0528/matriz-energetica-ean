@@ -6,8 +6,8 @@ import { initSeg } from './ui.js';
 
 const views = { colombia: matriz, ean };
 const HERO = {
-  colombia: ['Matriz energética de Colombia', 'Potencial solar, eólico y geotérmico por territorio, tipo de potencial y periodo.'],
-  ean: ['Energía en la universidad', 'Consumo, generación solar y cargas de los edificios Legacy y Nogal.'],
+  colombia: ['Matriz energética de Colombia', 'Aquí puedes ver cuánto potencial teórico tienen los recursos solar, eólico y geotérmico del país y qué parte podría aprovecharse como energía útil. Filtra por región, departamento o municipio y por tipo de recurso para comparar ambas curvas en el tiempo. Los datos actuales son de ejemplo, mientras se consolidan las fuentes del geovisor.'],
+  ean: ['Energía en la universidad', 'Este módulo muestra cómo usan la energía los edificios Legacy y Nogal y qué aportan sus sistemas solares: consumo, generación, cargas atendidas, ahorro en pesos y emisiones de CO₂ evitadas. Puedes ver cada edificio por separado o compararlos, y elegir los meses que quieres analizar. Los datos son de ejemplo mientras se obtiene el acceso a los sistemas solares.'],
 };
 const $ = (id) => document.getElementById(id);
 let current = 'colombia';

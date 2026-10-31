@@ -43,22 +43,45 @@ export function initSeg(scope = document) {
 }
 
 /* ---------- Gráficas ---------- */
-const valueLabels = {
-  id: 'valueLabels',
+const compact = new Intl.NumberFormat('es-CO', { notation: 'compact', maximumFractionDigits: 1 });
+const nf = (d) => (v) => Number(v).toLocaleString('es-CO', { minimumFractionDigits: d, maximumFractionDigits: d });
+const sumOf = (a) => a.reduce((x, y) => x + y, 0);
+
+/** Valor de cada barra / punto / porción, siempre visible (en pantalla y en el PNG). */
+const dataLabels = (s, ex) => ({
+  id: 'dataLabels',
   afterDatasetsDraw(c) {
-    const { ctx } = c; ctx.save(); ctx.fillStyle = '#171717'; ctx.font = `600 13px ${FONT}`; ctx.textAlign = 'center';
-    c.data.datasets.forEach((d, i) => c.getDatasetMeta(i).data.forEach((el, j) => ctx.fillText(fmt(d.data[j]), el.x, el.y - 7)));
+    const { ctx } = c, d0 = s.dec ?? 0, full = nf(d0);
+    const f = (v) => (!ex && d0 === 0 && Math.abs(v) >= 1e5 ? compact.format(v) : full(v));
+    ctx.save(); ctx.font = `700 ${ex ? 14 : 11}px ${FONT}`; ctx.textAlign = 'center'; ctx.textBaseline = 'bottom';
+    ctx.fillStyle = ex ? '#171717' : css('--ink');
+    if (s.kind === 'bar') {
+      c.data.datasets.forEach((d, i) => c.getDatasetMeta(i).data.forEach((el, j) => ctx.fillText(f(d.data[j]), el.x, el.y - 5)));
+    } else if (s.kind === 'line') {
+      c.data.datasets.forEach((d, i) => {
+        const pts = c.getDatasetMeta(i).data, n = d.data.length;
+        const idx = n <= 14 ? d.data.map((_, k) => k) : [d.data.indexOf(Math.max(...d.data)), n - 1]; // series largas: máximo y último
+        idx.forEach((k) => ctx.fillText(f(d.data[k]), Math.min(pts[k].x, c.chartArea.right - 18), pts[k].y - 9));
+      });
+    } else {
+      const data = c.data.datasets[0].data, tot = sumOf(data);
+      c.getDatasetMeta(0).data.forEach((el, j) => {
+        const p = (data[j] / tot) * 100; if (p < 6) return;
+        const { x, y } = el.tooltipPosition(); ctx.fillStyle = '#fff'; ctx.textBaseline = 'middle'; ctx.fillText(`${p.toFixed(0)}%`, x, y);
+      });
+    }
     ctx.restore();
   },
-};
+});
 
 function config(s, ex, logoImg) {
   const round = s.kind === 'pie' || s.kind === 'doughnut';
   const ink = ex ? '#171717' : css('--ink-2'), grid = ex ? '#e3e6e3' : css('--hair');
+  const F = nf(s.dec ?? 0);
   const axisTitle = (text) => ({ display: !!text, text, color: ex ? '#171717' : css('--ink-2'), font: { family: FONT, weight: '700', size: ex ? 17 : 12 }, padding: ex ? 10 : 6 });
-  const labels = ex && round ? s.labels.map((l, i) => `${l}: ${fmt(s.datasets[0].data[i])} ${s.unit}`) : s.labels;
-  const size = ex ? 1.25 : 1;
-  const plugins = [];
+  const tot = round ? sumOf(s.datasets[0].data) : 0;
+  const labels = round ? s.labels.map((l, i) => `${l}: ${F(s.datasets[0].data[i])} ${s.unit} (${((s.datasets[0].data[i] / tot) * 100).toFixed(0)}%)`) : s.labels;
+  const plugins = [dataLabels(s, ex)];
   if (ex) {
     plugins.push({ id: 'bg', beforeDraw: (c) => { c.ctx.save(); c.ctx.globalCompositeOperation = 'destination-over'; c.ctx.fillStyle = '#fff'; c.ctx.fillRect(0, 0, c.width, c.height); c.ctx.restore(); } });
     plugins.push({ id: 'brand', afterDraw: (c) => {
@@ -68,7 +91,6 @@ function config(s, ex, logoImg) {
       c.ctx.fillText(`Universidad EAN · Matriz energética · Datos de demostración · ${new Date().toLocaleDateString('es-CO')}`, 40, h - 16);
       c.ctx.restore();
     } });
-    if (s.kind === 'bar' && s.labels.length * s.datasets.length <= 24) plugins.push(valueLabels);
   }
   return {
     type: s.kind, plugins,
@@ -78,26 +100,32 @@ function config(s, ex, logoImg) {
         label: d.label, data: d.data,
         backgroundColor: s.kind === 'line' ? d.color : d.colors || d.color,
         borderColor: s.kind === 'line' ? d.color : round ? (ex ? '#fff' : css('--bg')) : undefined,
-        borderWidth: s.kind === 'line' ? 3 : round ? 3 : 0, tension: 0.35, pointRadius: s.kind === 'line' ? (ex ? 3 : 2) : 0, pointHoverRadius: 5,
+        borderWidth: s.kind === 'line' ? 3 : round ? 3 : 0, tension: 0.35, pointRadius: s.kind === 'line' ? 3 : 0, pointHoverRadius: 5,
         borderRadius: s.kind === 'bar' ? 8 : 0, borderSkipped: false, maxBarThickness: 64, hoverOffset: round ? 8 : 0,
       })),
     },
     options: {
       responsive: !ex, maintainAspectRatio: false, animation: ex ? false : { duration: 700, easing: 'easeOutQuart' },
       devicePixelRatio: ex ? 2 : undefined,
-      layout: { padding: ex ? { top: 8, right: 36, bottom: 34, left: 24 } : 4 },
+      layout: { padding: ex ? { top: 24, right: 36, bottom: 34, left: 24 } : { top: 20, right: 8, bottom: 4, left: 4 } },
       interaction: { mode: 'index', intersect: false },
       plugins: {
         title: { display: ex, text: s.title, align: 'start', color: '#000', font: { family: "'Archivo', sans-serif", weight: '800', size: 28 }, padding: { bottom: 2 } },
         subtitle: { display: ex && !!s.subtitle, text: s.subtitle, align: 'start', color: '#4a4f4b', font: { family: FONT, size: 14 }, padding: { bottom: 18 } },
-        legend: { display: round || s.datasets.length > 1, position: ex ? 'bottom' : round ? 'bottom' : 'top',
-          labels: { color: ink, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: ex ? 18 : 14, font: { family: FONT, size: ex ? 15 : 12 } } },
+        legend: { display: round || s.datasets.length > 1, position: ex || round ? 'bottom' : 'top',
+          labels: { color: ink, usePointStyle: true, pointStyle: 'circle', boxWidth: 8, padding: ex ? 18 : 14, font: { family: FONT, size: ex ? 15 : 12 },
+            // Cada color de la leyenda lleva su dato relevante (total de la serie)
+            generateLabels: (chart) => {
+              const base = Chart.defaults.plugins.legend.labels.generateLabels(chart);
+              if (!round && s.totals) base.forEach((l) => { l.text = `${l.text} · ${F(sumOf(s.datasets[l.datasetIndex].data))} ${s.unit}`; });
+              return base;
+            } } },
         tooltip: { backgroundColor: 'rgba(20,22,20,.92)', titleFont: { family: FONT, weight: '700' }, bodyFont: { family: FONT }, padding: 12, cornerRadius: 12, boxPadding: 4,
-          callbacks: { label: (c) => ` ${c.dataset.label ? c.dataset.label + ': ' : ''}${fmt(c.parsed.y ?? c.parsed)} ${s.unit}` } },
+          callbacks: { label: (c) => ` ${c.dataset.label ? c.dataset.label + ': ' : ''}${F(c.parsed.y ?? c.parsed)} ${s.unit}` } },
       },
       scales: round ? {} : {
         x: { title: axisTitle(s.xTitle), ticks: { color: ink, font: { size: ex ? 14 : 11 }, maxRotation: 45, autoSkip: true }, grid: { display: false }, border: { color: grid } },
-        y: { title: axisTitle(s.yTitle), ticks: { color: ink, font: { size: ex ? 14 : 11 }, callback: fmt }, grid: { color: grid, borderDash: [3, 4] }, border: { display: false }, beginAtZero: true },
+        y: { title: axisTitle(s.yTitle), ticks: { color: ink, font: { size: ex ? 14 : 11 }, callback: (v) => (s.dec ? F(v) : fmt(v)) }, grid: { color: grid, borderDash: [3, 4] }, border: { display: false }, beginAtZero: true, grace: '8%' },
       },
     },
   };
@@ -143,3 +171,17 @@ export function card(parent, s) {
   btn.onclick = async () => { btn.disabled = true; btn.textContent = '…'; try { await exportPng(s, filename); } finally { btn.disabled = false; btn.textContent = 'PNG'; } };
   return el;
 }
+
+/** Tabla de datos con columnas propias. cols: encabezados; rows: celdas ya formateadas (1.ª columna = texto, el resto numéricas). */
+export function dataTable(parent, { title, cols, rows, note = '', csv = null, filename = 'tabla', hi = null }) {
+  const el = document.createElement('section');
+  el.className = 'card glass wide';
+  el.innerHTML = `<header><h3>${title}</h3><div class="actions">${csv ? `<a class="btn" href="${csv}" download="${filename}.csv">CSV</a>` : ''}</div></header>
+    <div class="body tbl"><table><thead><tr>${cols.map((c, i) => `<th class="${i ? 'n' : ''}">${c}</th>`).join('')}</tr></thead>
+    <tbody>${rows.map((r) => `<tr class="${hi && r[0] === hi ? 'hi' : ''}">${r.map((c, i) => `<${i ? 'td class="n"' : 'th scope="row"'}>${c}</${i ? 'td' : 'th'}>`).join('')}</tr>`).join('')}</tbody></table></div>
+    ${note ? `<p class="note">${note}</p>` : ''}`;
+  parent.append(el);
+  return el;
+}
+
+export const kpis = (items) => `<div class="kpis">${items.map(([l, v, u, c]) => `<div class="kpi glass" style="--c:${c || 'var(--accent)'}"><small>${l}</small><b>${v}</b><small>${u}</small></div>`).join('')}</div>`;

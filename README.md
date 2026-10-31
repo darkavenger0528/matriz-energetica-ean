@@ -37,14 +37,16 @@ make test
 | Endpoint | Uso |
 |---|---|
 | `GET /meta` | Catálogos para poblar filtros |
-| `GET /matriz/agregado` | Totales por `agrupar=recurso\|potencial\|territorio` |
-| `GET /matriz/tendencia` | Serie mensual por categoría |
+| `GET /matriz/series` | Series mensuales: potencial teórico y energía útil |
+| `GET /matriz/resumen` | Totales teórico / útil por grupo |
 | `GET /matriz/export.csv` | CSV (mismos filtros, UTF-8 con BOM para Excel) |
 | `GET /ean/mensual?edificio=todos\|legacy\|nogal` | Consumo y generación mensual |
 | `GET /ean/cargas?edificio=…` | Distribución de cargas |
 | `GET /ean/export.csv?edificio=…&meses=1&meses=2` | CSV EAN |
 
-Filtros de matriz: `level`, `territorio`, `recurso`, `subtipo`, `potencial` (repetible), `desde`, `hasta` (`YYYY-MM`), `agrupar`.
+Filtros de matriz: `region`, `departamento`, `municipio`, `recurso`, `subtipo` y, solo si `PERIOD_SELECTABLE=true`, `desde` / `hasta` (`YYYY-MM`). Se agrupa por recurso (con «todos») o un nivel territorial más abajo del elegido.
+
+**Parámetros editables** (variables de entorno / `app/config.py`): `PERIOD_SELECTABLE`, `TARIFA_COP_KWH` (placeholder 800) y `FACTOR_EMISION_KG_KWH` (0,220 = UPME 2024, inventarios de GEI; se actualiza cada año). «Energía útil» equivale hoy al potencial técnico de los datos de ejemplo.
 
 ## Publicación
 
