@@ -22,7 +22,7 @@ jobs:
         env:
           VITE_STATIC: "true"
           VITE_BASE: /${{ github.event.repository.name }}/
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with: { path: frontend/dist }
 
   deploy:
