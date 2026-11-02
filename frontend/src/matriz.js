@@ -38,16 +38,16 @@ function filters() {
   const dirty = S.region || S.departamento || S.municipio || S.recurso !== 'todos' || S.subtipo !== 'todas' || (p.seleccionable && (S.desde !== p.desde || S.hasta !== p.hasta));
   document.getElementById('filters').innerHTML = `
     <h4>Territorio</h4>
-    <label>Región</label>${select('region', [{ value: '', label: 'Todas' }, ...meta.regiones], S.region)}
-    <label>Departamento</label>${select('departamento', [{ value: '', label: 'Todos' }, ...deps], S.departamento)}
-    <label>Municipio</label>${select('municipio', [{ value: '', label: 'Todos' }, ...munis], S.municipio)}
+    <div class="f"><label>Región</label>${select('region', [{ value: '', label: 'Todas' }, ...meta.regiones], S.region)}</div>
+    <div class="f"><label>Departamento</label>${select('departamento', [{ value: '', label: 'Todos' }, ...deps], S.departamento)}</div>
+    <div class="f"><label>Municipio</label>${select('municipio', [{ value: '', label: 'Todos' }, ...munis], S.municipio)}</div>
     <h4>Tipo de energía</h4>
-    <label>Recurso</label>${select('recurso', [{ value: 'todos', label: 'Todos (matriz)' }, ...meta.recursos], S.recurso)}
-    ${rec ? `<label>Subtipo</label>${select('subtipo', [{ value: 'todas', label: 'Todas' }, ...rec.subtipos], S.subtipo)}` : ''}
+    <div class="f"><label>Recurso</label>${select('recurso', [{ value: 'todos', label: 'Todos (matriz)' }, ...meta.recursos], S.recurso)}</div>
+    ${rec ? `<div class="f"><label>Subtipo</label>${select('subtipo', [{ value: 'todas', label: 'Todas' }, ...rec.subtipos], S.subtipo)}</div>` : ''}
     <h4>Periodo</h4>
     ${p.seleccionable
-      ? `<label>Desde</label><input type="month" data-k="desde" min="${p.desde}" max="${p.hasta}" value="${S.desde}">
-         <label>Hasta</label><input type="month" data-k="hasta" min="${p.desde}" max="${p.hasta}" value="${S.hasta}">`
+      ? `<div class="f"><label>Desde</label><input type="month" data-k="desde" min="${p.desde}" max="${p.hasta}" value="${S.desde}"></div>
+         <div class="f"><label>Hasta</label><input type="month" data-k="hasta" min="${p.desde}" max="${p.hasta}" value="${S.hasta}"></div>`
       : `<p class="note" style="margin:0">Serie completa disponible: ${p.desde} a ${p.hasta}.</p>`}
     <button type="button" class="btn clear" data-clear ${dirty ? '' : 'disabled'}>Borrar filtros</button>`;
 }
